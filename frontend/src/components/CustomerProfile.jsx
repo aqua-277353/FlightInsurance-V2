@@ -14,77 +14,65 @@ const CONTRACT_ABI = [
   "function userProfiles(address _user) public view returns (string memory)"
 ];
 
-// --- DANH SÁCH GATEWAY (ĐÃ SỬA: Đổi nguồn ổn định hơn) ---
 const IPFS_GATEWAYS = [
-    "https://gateway.pinata.cloud/ipfs/", // Chính chủ Pinata (Nhanh nhất nếu không bị chặn)
-    "https://ipfs.io/ipfs/",              // Gateway gốc quốc tế
-    "https://4everland.io/ipfs/",         // Gateway dự phòng ổn định
+    "https://gateway.pinata.cloud/ipfs/", 
+    "https://ipfs.io/ipfs/",             
+    "https://4everland.io/ipfs/",         
 ];
 
 export default function CustomerProfile({ address }) {
+  // 1. STATE FORM
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
   });
+  
+  // 2. STATE ẢNH ĐẠI DIỆN
   const [avatarUrl, setAvatarUrl] = useState('');
   const [file, setFile] = useState(null);
 
+  // 3. STATE CĂN CƯỚC CÔNG DÂN (PDF) - MỚI
+  const [pdfUrl, setPdfUrl] = useState(''); // Link hiển thị
+  const [pdfFile, setPdfFile] = useState(null); // File gốc để upload
+
+  // 4. STATE TRẠNG THÁI
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [status, setStatus] = useState('');
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
-  // --- HÀM TRÍCH XUẤT CID SẠCH (QUAN TRỌNG) ---
+  // --- HÀM TRÍCH XUẤT CID SẠCH ---
   const extractCID = (input) => {
       if (!input) return "";
       let cid = input;
-      
-      // Nếu là link full (https://gateway.../ipfs/QmHash) -> cắt lấy phần đuôi
-      if (cid.includes("/ipfs/")) {
-          cid = cid.split("/ipfs/").pop();
-      }
-      // Nếu là giao thức ipfs://QmHash -> cắt bỏ tiền tố
-      if (cid.startsWith("ipfs://")) {
-          cid = cid.replace("ipfs://", "");
-      }
-      
-      // Loại bỏ các ký tự thừa
+      if (cid.includes("/ipfs/")) cid = cid.split("/ipfs/").pop();
+      if (cid.startsWith("ipfs://")) cid = cid.replace("ipfs://", "");
       return cid.split("?")[0].split("#")[0];
   };
 
   // --- HÀM TẢI DỮ LIỆU ĐA CỔNG ---
   const fetchFromIPFS = async (rawInput) => {
       const cid = extractCID(rawInput); 
-      console.log(`🔍 CID gốc: ${cid} (Input: ${rawInput})`);
-
       for (const gateway of IPFS_GATEWAYS) {
           try {
               const url = `${gateway}${cid}`;
-              
               const controller = new AbortController();
-              // TĂNG TIMEOUT LÊN 15 GIÂY (Mạng IPFS thường chậm)
               const timeoutId = setTimeout(() => controller.abort(), 15000); 
-
               const response = await fetch(url, { signal: controller.signal });
               clearTimeout(timeoutId);
-
-              if (response.ok) {
-                  return await response.json();
-              }
+              if (response.ok) return await response.json();
           } catch (err) {
-              // Lỗi gateway này thì thử cái tiếp theo...
               console.warn(`Gateway ${gateway} failed, trying next...`);
           }
       }
       throw new Error("Không thể tải dữ liệu (Tất cả Gateway đều bận hoặc bị chặn).");
   };
 
-  // --- HÀM HIỂN THỊ ẢNH ---
-  const getCleanImageUrl = (rawUrl) => {
-      if (!rawUrl) return "";
-      const cid = extractCID(rawUrl);
-      // Dùng gateway pinata để hiển thị ảnh
+  // --- HÀM TẠO LINK GATEWAY (Dùng chung cho cả Ảnh và PDF) ---
+  const getGatewayUrl = (rawCid) => {
+      if (!rawCid) return "";
+      const cid = extractCID(rawCid);
       return `https://gateway.pinata.cloud/ipfs/${cid}`;
   };
 
@@ -127,14 +115,16 @@ export default function CustomerProfile({ address }) {
 
         setStatus('🔐 Vui lòng KÝ TRÊN VÍ để xem dữ liệu...');
         
+        // --- GIẢI MÃ DỮ LIỆU ---
         if (!data.encryptedData) {
-            // Dữ liệu cũ không mã hóa
+            // Trường hợp dữ liệu cũ chưa mã hóa (Fallback)
             setFormData({
                 fullName: data.fullName || '',
                 email: data.email || '',
                 phone: data.phone || ''
             });
-            setAvatarUrl(getCleanImageUrl(data.image));
+            setAvatarUrl(getGatewayUrl(data.image));
+            setPdfUrl(getGatewayUrl(data.pdf)); // Lấy PDF nếu có
             setStatus('✅ Dữ liệu đã tải (Không bảo mật)!');
             setFetching(false);
             return;
@@ -142,7 +132,6 @@ export default function CustomerProfile({ address }) {
 
         const signer = await provider.getSigner();
         const signature = await signer.signMessage("Ký để bảo mật dữ liệu FlightInsurance của bạn");
-
         const decryptedData = decryptData(data.encryptedData, signature);
 
         if (decryptedData) {
@@ -152,7 +141,10 @@ export default function CustomerProfile({ address }) {
             phone: decryptedData.phone || '',
           });
           
-          setAvatarUrl(getCleanImageUrl(decryptedData.image));
+          // Set URL cho Ảnh và PDF
+          setAvatarUrl(getGatewayUrl(decryptedData.image));
+          setPdfUrl(getGatewayUrl(decryptedData.pdf)); // Trường dữ liệu mới: pdf
+
           setStatus('✅ Hồ sơ đã được tải thành công!');
         } else {
           throw new Error("Giải mã thất bại. Có thể bạn dùng sai ví?");
@@ -160,7 +152,6 @@ export default function CustomerProfile({ address }) {
 
       } catch (error) {
         console.error("Chi tiết lỗi Load:", error);
-        
         if (error.code === 'ACTION_REJECTED' || error.info?.error?.code === 4001) {
             setStatus('⚠️ Bạn đã từ chối ký xác nhận.');
         } else {
@@ -187,22 +178,31 @@ export default function CustomerProfile({ address }) {
       setStatus('🔐 Vui lòng ký để mã hóa dữ liệu...');
       const signature = await signer.signMessage("Ký để bảo mật dữ liệu FlightInsurance của bạn");
 
-      // Upload ảnh
+      // 1. Upload ẢNH (Nếu có file mới)
       let finalImageCid = avatarUrl ? extractCID(avatarUrl) : "";
-      
       if (file) {
-        setStatus('☁️ Đang tải ảnh lên IPFS...');
+        setStatus('☁️ Đang tải ảnh Avatar lên IPFS...');
         const resultUrl = await pinFileToIPFS(file);
         if (!resultUrl) throw new Error("Lỗi upload ảnh.");
-        
         finalImageCid = extractCID(resultUrl); 
       }
 
+      // 2. Upload PDF CCCD (Nếu có file mới) - MỚI
+      let finalPdfCid = pdfUrl ? extractCID(pdfUrl) : "";
+      if (pdfFile) {
+        setStatus('📄 Đang tải Căn cước công dân lên IPFS...');
+        const resultPdfUrl = await pinFileToIPFS(pdfFile);
+        if (!resultPdfUrl) throw new Error("Lỗi upload file PDF.");
+        finalPdfCid = extractCID(resultPdfUrl);
+      }
+
+      // 3. Đóng gói dữ liệu
       const rawData = { 
           fullName: formData.fullName,
           email: formData.email,
           phone: formData.phone,
           image: finalImageCid, 
+          pdf: finalPdfCid, // Thêm trường PDF vào JSON
           walletAddress: address 
       };
       
@@ -232,6 +232,7 @@ export default function CustomerProfile({ address }) {
         setStatus('✅ Lưu thành công! Đang tải lại...');
         setReloadTrigger(prev => prev + 1);
         setFile(null);
+        setPdfFile(null); // Reset file input
       }
 
     } catch (error) {
@@ -247,10 +248,23 @@ export default function CustomerProfile({ address }) {
   };
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  
+  // Handle đổi Ảnh
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     setFile(f);
     if (f) setAvatarUrl(URL.createObjectURL(f));
+  };
+
+  // Handle đổi PDF - MỚI
+  const handlePdfChange = (e) => {
+      const f = e.target.files[0];
+      if (f && f.type === "application/pdf") {
+          setPdfFile(f);
+          setPdfUrl(URL.createObjectURL(f)); // Tạo link preview tạm thời
+      } else {
+          alert("Vui lòng chỉ chọn file PDF!");
+      }
   };
 
   return (
@@ -260,11 +274,13 @@ export default function CustomerProfile({ address }) {
         {fetching && <span style={{fontSize: '12px', color: '#007bff'}}>⏳ Đang đồng bộ...</span>}
       </div>
       
+      {/* VÍ */}
       <div style={styles.formGroup}>
         <label style={styles.label}>Ví kết nối</label>
         <input value={address || ''} disabled style={{...styles.input, background:'#eee', color: '#555'}}/>
       </div>
 
+      {/* ẢNH ĐẠI DIỆN */}
       <div style={styles.formGroup}>
         <label style={styles.label}>Ảnh đại diện</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginTop: '5px' }}>
@@ -282,6 +298,7 @@ export default function CustomerProfile({ address }) {
         </div>
       </div>
 
+      {/* THÔNG TIN CÁ NHÂN */}
       <div style={styles.formGroup}>
         <label style={styles.label}>Họ và Tên</label>
         <input name="fullName" value={formData.fullName} onChange={handleChange} disabled={loading || fetching} style={styles.input} />
@@ -297,6 +314,37 @@ export default function CustomerProfile({ address }) {
         <input name="phone" value={formData.phone} onChange={handleChange} disabled={loading || fetching} style={styles.input} />
       </div>
 
+      {/* --- PHẦN MỚI: CĂN CƯỚC CÔNG DÂN (PDF) --- */}
+      <div style={styles.formGroup}>
+        <label style={styles.label}>Căn cước công dân (File PDF)</label>
+        <input 
+            type="file" 
+            accept="application/pdf" 
+            onChange={handlePdfChange} 
+            disabled={loading || fetching}
+            style={{...styles.input, padding: '5px'}} 
+        />
+        
+        {/* KHUNG HIỂN THỊ PDF */}
+        {pdfUrl && (
+            <div style={{ marginTop: '10px', border: '1px solid #ddd', borderRadius: '5px', overflow: 'hidden' }}>
+                <p style={{fontSize: '12px', padding: '5px', background: '#f1f1f1', margin: 0, borderBottom: '1px solid #ddd'}}>📄 Xem trước tài liệu:</p>
+                <embed 
+                    src={pdfUrl} 
+                    type="application/pdf" 
+                    width="100%" 
+                    height="250px" 
+                />
+                <div style={{padding: '5px', textAlign: 'right'}}>
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" style={{fontSize: '12px', color: '#007bff'}}>
+                        Mở trong tab mới ↗
+                    </a>
+                </div>
+            </div>
+        )}
+      </div>
+
+      {/* BUTTONS */}
       <div style={{ marginTop: '20px' }}>
         <button 
           onClick={handleSave}

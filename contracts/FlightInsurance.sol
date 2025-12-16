@@ -9,9 +9,8 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
     
     IERC20 public paymentToken;
     uint256 public nextPolicyId;
-    string public latestDataCID; // CID dữ liệu chuyến bay (Admin quản lý)
+    string public latestDataCID; 
 
-    // --- MỚI: Mapping lưu CID hồ sơ cá nhân (Mỗi người tự quản lý) ---
     mapping(address => string) public userProfiles;
 
     enum Status { PENDING, REJECTED, PAID }
@@ -104,9 +103,8 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
         }
     }
     
-    // --- 5. TÍNH NĂNG MỚI: CẬP NHẬT HỒ SƠ NGƯỜI DÙNG (AI CŨNG GỌI ĐƯỢC) ---
+    // --- 5. TÍNH NĂNG MỚI: CẬP NHẬT HỒ SƠ NGƯỜI DÙNG  ---
     function updateUserProfile(string memory _newCid) external {
-        // Lưu CID vào mapping của chính người gọi hàm (msg.sender)
         userProfiles[msg.sender] = _newCid;
         emit UserProfileUpdated(msg.sender, _newCid);
     }

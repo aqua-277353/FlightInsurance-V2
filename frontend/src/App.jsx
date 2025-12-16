@@ -241,9 +241,9 @@ function App() {
 
       <div style={styles.navBar}>
          <div style={styles.navContainer}>
-            <button style={activeTab===1?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(1)}>{isAdmin?"1. Quản lý":"1. Mua Vé"}</button>
-            <button style={activeTab===2?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(2)}>{isAdmin?"2. Cập nhật":"2. Claim"}</button>
-            <button style={activeTab===3?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(3)}>{isAdmin?"3. Thống kê":"3. Hồ sơ"}</button>
+            <button style={activeTab===1?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(1)}>{isAdmin?"Quản lý":"Mua Vé"}</button>
+            <button style={activeTab===2?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(2)}>{isAdmin?"Cập nhật":"Claim"}</button>
+            <button style={activeTab===3?styles.navItemActive:styles.navItem} onClick={()=>setActiveTab(3)}>{isAdmin?"Thống kê":"Hồ sơ"}</button>
          </div>
       </div>
 
