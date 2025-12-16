@@ -9,7 +9,10 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
     
     IERC20 public paymentToken;
     uint256 public nextPolicyId;
-    string public latestDataCID; 
+    string public latestDataCID; // CID dữ liệu chuyến bay (Admin quản lý)
+
+    // --- MỚI: Mapping lưu CID hồ sơ cá nhân (Mỗi người tự quản lý) ---
+    mapping(address => string) public userProfiles;
 
     enum Status { PENDING, REJECTED, PAID }
 
@@ -34,18 +37,21 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
     event PolicyPurchased(uint256 policyId, address customer, string flightCode);
     event ClaimProcessed(uint256 policyId, string status, uint256 amount);
     event DataUpdated(string newCid); 
+    
+    // --- MỚI: Sự kiện khi người dùng cập nhật hồ sơ ---
+    event UserProfileUpdated(address indexed user, string newCid);
 
     constructor(address _tokenAddress) Ownable(msg.sender) {
         paymentToken = IERC20(_tokenAddress);
     }
 
-    // --- 1. HÀM CẬP NHẬT CID (Dùng khi thêm chuyến bay/vé) ---
+    // --- 1. HÀM CẬP NHẬT CID CHUYẾN BAY (ADMIN) ---
     function updateDataCID(string memory _newCid) external onlyOwner {
         latestDataCID = _newCid;
         emit DataUpdated(_newCid);
     }
 
-    // --- 2. CẬP NHẬT TRẠNG THÁI BAY (cập nhật CID mới) ---
+    // --- 2. CẬP NHẬT TRẠNG THÁI BAY (ADMIN) ---
     function updateFlightStatus(string memory _flightCode, uint256 _actualDeparture, string memory _newCid) external onlyOwner {
         flightActualDepartures[_flightCode] = _actualDeparture;
         latestDataCID = _newCid; 
@@ -55,8 +61,8 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
     // --- 3. MUA BẢO HIỂM ---
     function buyInsurance(string memory _flightCode, uint256 _scheduledDeparture) external nonReentrant {
         require(_scheduledDeparture > block.timestamp, "Gio bay khong hop le");
-        // Tạm bỏ check 2 ngày để dễ test, nếu cần bạn uncomment dòng dưới
         // require(_scheduledDeparture - block.timestamp >= PURCHASE_DEADLINE, "Phai mua truoc 2 ngay");
+        
         bool success = paymentToken.transferFrom(msg.sender, address(this), TICKET_PRICE);
         require(success, "Loi thanh toan: Hay Approve Token truoc");
 
@@ -98,6 +104,14 @@ contract FlightInsurance is Ownable, ReentrancyGuard {
         }
     }
     
+    // --- 5. TÍNH NĂNG MỚI: CẬP NHẬT HỒ SƠ NGƯỜI DÙNG (AI CŨNG GỌI ĐƯỢC) ---
+    function updateUserProfile(string memory _newCid) external {
+        // Lưu CID vào mapping của chính người gọi hàm (msg.sender)
+        userProfiles[msg.sender] = _newCid;
+        emit UserProfileUpdated(msg.sender, _newCid);
+    }
+
+    // --- 6. QUẢN LÝ TOKEN ---
     function withdrawTokens(uint256 amount) external onlyOwner {
         require(paymentToken.transfer(msg.sender, amount), "Loi rut tien");
     }
