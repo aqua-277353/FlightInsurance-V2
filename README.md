@@ -1,5 +1,3 @@
----
-
 ```markdown
 # ✈️ FlightShield - Decentralized Flight Insurance DApp
 
