@@ -145,7 +145,8 @@ Truy cập: `http://localhost:5173`
 
 ## 📸 Hình ảnh Demo
 
-*(Chèn ảnh chụp màn hình dự án của bạn vào đây)*
+<img width="1918" height="879" alt="image" src="https://github.com/user-attachments/assets/957df7b1-6367-40a4-8e98-464dcab08a9d" />
+
 
 ---
 
@@ -155,15 +156,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
-**Developed by [Tên Của Bạn] - 2025**
+**Developed by Lê Bá Vinh - 2025**
 
 ```
-
-### Cách dùng:
-1.  Copy toàn bộ nội dung trong khối code trên.
-2.  Tạo file `README.md` trong folder dự án của bạn.
-3.  Dán vào và bấm Save.
-4.  Thay thế phần `[Tên Của Bạn]` và link GitHub nếu cần.
-5.  Nếu có ảnh chụp màn hình ứng dụng, hãy thay thế link ảnh chỗ `![Dashboard]` để báo cáo sinh động hơn.
-
 ```
