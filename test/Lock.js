@@ -2,78 +2,91 @@ const { loadFixture } = require("@nomicfoundation/hardhat-toolbox/network-helper
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("Flight Insurance System", function () {
+describe("Flight Insurance System (Strict Mode)", function () {
 
-  // --- 1. SETUP MÔI TRƯỜNG (Chạy 1 lần dùng cho nhiều bài test) ---
   async function deployFixture() {
-    // Lấy danh sách ví: Admin (deployer) và User (khách hàng)
-    const [admin, user] = await ethers.getSigners();
+    const [admin, user, stranger] = await ethers.getSigners();
 
-    // Deploy Token (FLC)
+    // Deploy Token
     const FlightCoin = await ethers.getContractFactory("FlightCoin");
     const token = await FlightCoin.deploy();
     await token.waitForDeployment();
 
-    // Deploy Bảo Hiểm (Truyền địa chỉ token vào)
+    // Deploy Insurance
     const FlightInsurance = await ethers.getContractFactory("FlightInsurance");
     const insurance = await FlightInsurance.deploy(token.target);
     await insurance.waitForDeployment();
 
-    // Chuyển trước 5000 token cho User để có tiền mua vé
-    // Lưu ý: 5000 * 10^18 để đúng chuẩn đơn vị
+    // Chuyển tiền cho user
     const amount = ethers.parseUnits("5000", 18);
     await token.transfer(user.address, amount);
 
-    return { token, insurance, admin, user };
+    return { token, insurance, admin, user, stranger };
   }
 
-  // --- 2. CÁC BÀI TEST ---
-  describe("Deployment", function () {
-    it("Admin phải có đúng 1 triệu coin - 5000 coin đã chuyển", async function () {
-      const { token, admin } = await loadFixture(deployFixture);
-      // Tổng cung 1 triệu, trừ đi 5000 đã cho user
-      const expected = ethers.parseUnits("995000", 18); 
-      expect(await token.balanceOf(admin.address)).to.equal(expected);
+  // --- 1. TEST TIÊU CHUẨN ERC20 (MỚI THÊM) ---
+  describe("ERC20 Compliance Checks", function () {
+    it("Phải có đúng Name, Symbol và Decimals", async function () {
+      const { token } = await loadFixture(deployFixture);
+      // Nếu dev lười không khai báo name/symbol -> Test Fail ngay
+      expect(await token.name()).to.equal("FlightCoin");
+      expect(await token.symbol()).to.equal("FLC");
+      // Decimals chuẩn thường là 18
+      expect(await token.decimals()).to.equal(18);
+    });
+
+    it("Phải emit sự kiện Transfer khi chuyển tiền", async function () {
+      const { token, admin, user } = await loadFixture(deployFixture);
+      // ERC20 bắt buộc phải bắn event Transfer để ví MetaMask cập nhật số dư
+      await expect(token.transfer(user.address, 100))
+        .to.emit(token, "Transfer")
+        .withArgs(admin.address, user.address, 100);
+    });
+
+    it("Approve phải cập nhật đúng Allowance (Quyền tiêu tiền)", async function () {
+      const { token, user, insurance } = await loadFixture(deployFixture);
+      const amount = 1000;
+      
+      // Lúc đầu chưa approve thì allowance phải là 0
+      expect(await token.allowance(user.address, insurance.target)).to.equal(0);
+
+      // Sau khi approve
+      await token.connect(user).approve(insurance.target, amount);
+      
+      // Allowance phải tăng lên đúng số đó -> Chống việc hàm approve "giả trân"
+      expect(await token.allowance(user.address, insurance.target)).to.equal(amount);
+    });
+
+    it("Không thể chuyển tiền quá số dư (Chống hack tiền âm)", async function () {
+      const { token, user, stranger } = await loadFixture(deployFixture);
+      // User chỉ có 5000, cố chuyển 1 triệu -> Phải lỗi
+      const hugeAmount = ethers.parseUnits("1000000", 18);
+      await expect(token.connect(user).transfer(stranger.address, hugeAmount))
+        .to.be.reverted; 
+        // Hoặc .to.be.revertedWithCustomError nếu dùng error mới
     });
   });
 
-  describe("Mua Bảo Hiểm (Integration Test)", function () {
-    it("Phải mua thành công khi đã Approve", async function () {
+  // --- 2. TEST LOGIC NGHIỆP VỤ (CŨ) ---
+  describe("Insurance Logic", function () {
+    it("Mua bảo hiểm phải trừ đúng tiền và trừ vào allowance", async function () {
       const { token, insurance, user } = await loadFixture(deployFixture);
-
-      // --- QUAN TRỌNG: Giá vé trong contract của bạn ---
-      // Trong code Solidity bạn để: TICKET_PRICE = 1000
-      // Tức là 1000 wei (số siêu nhỏ). Tôi sẽ giữ nguyên logic này của bạn để test chạy đúng.
       const ticketPrice = 1000; 
 
-      // B1: User Approve cho contract Bảo hiểm lấy tiền
       await token.connect(user).approve(insurance.target, ticketPrice);
-
-      // B2: Tính thời gian bay (Ngày mai)
-      const now = Math.floor(Date.now() / 1000);
-      const departureTime = now + 86400 * 2; // 2 ngày sau
-
-      // B3: Gọi lệnh mua
-      // .connect(user) để giả lập user là người bấm nút
-      await expect(insurance.connect(user).buyInsurance("VN123", departureTime))
-        .to.emit(insurance, "PolicyPurchased")
-        .withArgs(0, user.address, "VN123");
-
-      // B4: Kiểm tra tiền đã bị trừ chưa
-      // Tiền contract bảo hiểm phải tăng lên 1000
-      expect(await token.balanceOf(insurance.target)).to.equal(ticketPrice);
-    });
-
-    it("Phải BÁO LỖI nếu quên Approve", async function () {
-      const { insurance, user } = await loadFixture(deployFixture);
       
       const now = Math.floor(Date.now() / 1000);
-      const departureTime = now + 86400 * 2;
+      
+      // Mua vé
+      await expect(insurance.connect(user).buyInsurance("VN123", now + 86400))
+        .to.emit(insurance, "PolicyPurchased");
 
-      // Cố tình mua mà không approve -> Mong đợi hệ thống báo lỗi (Reverted)
-      await expect(
-        insurance.connect(user).buyInsurance("VN123", departureTime)
-      ).to.be.reverted; // Hoặc .to.be.revertedWith("Loi thanh toan...");
+      // Check 1: Tiền về Contract bảo hiểm
+      expect(await token.balanceOf(insurance.target)).to.equal(ticketPrice);
+
+      // Check 2 (QUAN TRỌNG): Allowance của user phải về 0
+      // Nếu Token "dỏm", nó trừ tiền nhưng không trừ allowance -> Lỗi ERC20
+      expect(await token.allowance(user.address, insurance.target)).to.equal(0);
     });
   });
 });

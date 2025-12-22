@@ -19,4 +19,4 @@ export default function AdminUpdater({ dbFlights, handleUpdateAndPayout, formatT
       </div>
     </div>
   );
-}
+}                                                                                        
