@@ -1,9 +1,3 @@
-Chào bạn, đây là mẫu **README.md** chuyên nghiệp, đầy đủ và được thiết kế riêng cho dự án **Flight Insurance DApp** của bạn.
-
-File này được cấu trúc để gây ấn tượng với giảng viên chấm bài, làm nổi bật các công nghệ đã dùng (Hardhat, IPFS, React) và hướng dẫn chạy code chi tiết.
-
-Bạn hãy tạo một file tên là `README.md` trong thư mục gốc dự án và dán nội dung dưới đây vào nhé:
-
 ---
 
 ```markdown
